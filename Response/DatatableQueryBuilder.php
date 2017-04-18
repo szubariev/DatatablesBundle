@@ -140,6 +140,11 @@ class DatatableQueryBuilder
     private $joins;
 
     /**
+     * @var array
+     */
+    private $callbacks;
+
+    /**
      * The Datatable Options instance.
      *
      * @var Options
@@ -217,6 +222,7 @@ class DatatableQueryBuilder
         $this->searchColumns = array();
         $this->orderColumns = array();
         $this->joins = array();
+        $this->callbacks = array();
 
         $this->options = $datatable->getOptions();
         $this->features = $datatable->getFeatures();
@@ -315,6 +321,7 @@ class DatatableQueryBuilder
         $this->setSelectFrom();
         $this->setJoins($this->qb);
         $this->setWhere($this->qb);
+        $this->setWhereAllCallback($this->qb);
         $this->setOrderBy();
         $this->setLimit();
 
@@ -341,6 +348,47 @@ class DatatableQueryBuilder
     public function setQb($qb)
     {
         $this->qb = $qb;
+
+        return $this;
+    }
+
+    //-------------------------------------------------
+    // Callbacks
+    //-------------------------------------------------
+
+    /**
+     * Add the where-all function.
+     *
+     * @param $callback
+     *
+     * @return $this
+     * @throws Exception
+     */
+    public function addWhereAll($callback)
+    {
+        if (!is_callable($callback)) {
+            throw new Exception(sprintf("Callable expected and %s given", gettype($callback)));
+        }
+
+        $this->callbacks['WhereAll'][] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Set where all callback.
+     *
+     * @param QueryBuilder $qb
+     *
+     * @return $this
+     */
+    private function setWhereAllCallback(QueryBuilder $qb)
+    {
+        if (!empty($this->callbacks['WhereAll'])) {
+            foreach ($this->callbacks['WhereAll'] as $callback) {
+                $callback($qb);
+            }
+        }
 
         return $this;
     }
@@ -533,6 +581,9 @@ class DatatableQueryBuilder
         $qb = $this->em->createQueryBuilder();
         $qb->select('count(distinct '.$this->entityShortName.'.'.$this->rootEntityIdentifier.')');
         $qb->from($this->entityName, $this->entityShortName);
+
+        $this->setWhereAllCallback($qb);
+
         $query = $qb->getQuery();
         $query->useQueryCache($this->useCountQueryCache);
         call_user_func_array([$query, 'useResultCache'], $this->useCountResultCacheArgs);
